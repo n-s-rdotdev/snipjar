@@ -57,6 +57,12 @@ Build a desktop bundle:
 npm run tauri -- build
 ```
 
+Tray menu notes:
+
+- `Show` reopens the launcher window.
+- `Release notes` opens the bundled release notes window.
+- `Quit` exits the app.
+
 Run Rust tests:
 
 ```sh

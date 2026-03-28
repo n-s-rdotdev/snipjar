@@ -13,7 +13,10 @@ use tauri::tray::TrayIconBuilder;
 use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
 
 const MAIN_WINDOW_LABEL: &str = "main";
+const RELEASE_NOTES_WINDOW_LABEL: &str = "release-notes";
 const TRAY_ICON_ID: &str = "snipjar-menu-bar";
+const TRAY_SHOW_MENU_ID: &str = "tray-show";
+const TRAY_RELEASE_NOTES_MENU_ID: &str = "tray-release-notes";
 const TRAY_QUIT_MENU_ID: &str = "tray-quit";
 
 #[derive(Default)]
@@ -212,9 +215,41 @@ fn request_app_quit(app_handle: &tauri::AppHandle) {
     app_handle.exit(0);
 }
 
+fn open_release_notes_window(app_handle: &tauri::AppHandle) -> tauri::Result<()> {
+    if let Some(window) = app_handle.get_webview_window(RELEASE_NOTES_WINDOW_LABEL) {
+        window.unminimize()?;
+        window.show()?;
+        window.set_focus()?;
+        return Ok(());
+    }
+
+    tauri::WebviewWindowBuilder::new(
+        app_handle,
+        RELEASE_NOTES_WINDOW_LABEL,
+        tauri::WebviewUrl::App("release-notes.html".into()),
+    )
+    .title("Release notes")
+    .inner_size(540.0, 640.0)
+    .min_inner_size(420.0, 520.0)
+    .resizable(true)
+    .maximizable(false)
+    .build()?;
+
+    Ok(())
+}
+
 fn setup_tray(app: &tauri::App) -> tauri::Result<()> {
-    let quit_item = MenuItemBuilder::with_id(TRAY_QUIT_MENU_ID, "Quit").build(app)?;
-    let tray_menu = MenuBuilder::new(app).item(&quit_item).build()?;
+    let show_item = MenuItemBuilder::with_id(TRAY_SHOW_MENU_ID, "Show").build(app)?;
+    let release_notes_item = MenuItemBuilder::with_id(TRAY_RELEASE_NOTES_MENU_ID, "Release notes")
+        .build(app)?;
+    let quit_item = MenuItemBuilder::with_id(TRAY_QUIT_MENU_ID, "Quit")
+        .accelerator("CmdOrCtrl+Q")
+        .build(app)?;
+    let tray_menu = MenuBuilder::new(app)
+        .item(&show_item)
+        .item(&release_notes_item)
+        .item(&quit_item)
+        .build()?;
     let tray_icon = tauri::image::Image::from_bytes(include_bytes!("../icons/tray-icon.png"))
         .expect("failed to load tray icon");
 
@@ -224,7 +259,11 @@ fn setup_tray(app: &tauri::App) -> tauri::Result<()> {
         .icon_as_template(true)
         .show_menu_on_left_click(true)
         .on_menu_event(|app_handle, event| {
-            if event.id() == TRAY_QUIT_MENU_ID {
+            if event.id() == TRAY_SHOW_MENU_ID {
+                let _ = show_launcher_window(app_handle);
+            } else if event.id() == TRAY_RELEASE_NOTES_MENU_ID {
+                let _ = open_release_notes_window(app_handle);
+            } else if event.id() == TRAY_QUIT_MENU_ID {
                 request_app_quit(app_handle);
             }
         })
@@ -255,16 +294,14 @@ pub fn run() {
                 return;
             }
 
-            match event {
-                tauri::WindowEvent::CloseRequested { api, .. } => {
-                    api.prevent_close();
-                    let _ = window.hide();
-                }
-                _ => {}
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                api.prevent_close();
+                let _ = window.hide();
             }
         })
         .setup(|app| {
-            let db_state = storage::initialize(&app.handle())?;
+            let db_state = storage::initialize(app.handle())?;
+            #[cfg(debug_assertions)]
             let db_path = db_state.path.clone();
             app.manage(db_state);
             app.manage(RuntimeState::default());

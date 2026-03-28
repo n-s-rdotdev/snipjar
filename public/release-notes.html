@@ -1,0 +1,283 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Snipjar Release Notes</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg-base: rgba(28, 28, 30, 0.97);
+      --bg-surface: rgba(44, 44, 46, 0.5);
+      --bg-elevated: rgba(58, 58, 60, 0.4);
+      --border: rgba(255, 255, 255, 0.08);
+      --border-subtle: rgba(255, 255, 255, 0.05);
+      --text-primary: #f5f5f7;
+      --text-secondary: #a1a1a6;
+      --text-tertiary: #6e6e73;
+      --accent: #0f766e;
+      --accent-soft: rgba(15, 118, 110, 0.15);
+      --accent-text: #5eead4;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    html,
+    body {
+      height: 100%;
+      background: transparent;
+    }
+
+    body {
+      font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      -webkit-font-smoothing: antialiased;
+      color: var(--text-primary);
+      background: var(--bg-base);
+      overflow-y: auto;
+    }
+
+    .container {
+      max-width: 100%;
+      padding: 32px 28px 40px;
+    }
+
+    /* Version badge */
+    .version-badge {
+      display: inline-flex;
+      align-items: center;
+      padding: 4px 10px;
+      border-radius: 6px;
+      background: var(--accent-soft);
+      color: var(--accent-text);
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+    }
+
+    /* Title */
+    h1 {
+      margin-top: 16px;
+      font-size: 24px;
+      font-weight: 600;
+      line-height: 1.2;
+      letter-spacing: -0.02em;
+      color: var(--text-primary);
+    }
+
+    /* Lead paragraph */
+    .lead {
+      margin-top: 8px;
+      color: var(--text-secondary);
+      font-size: 13px;
+      line-height: 1.6;
+    }
+
+    /* Sections */
+    .section {
+      margin-top: 24px;
+    }
+
+    .section+.section {
+      margin-top: 20px;
+      padding-top: 20px;
+      border-top: 1px solid var(--border);
+    }
+
+    .section-title {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-secondary);
+      letter-spacing: 0.02em;
+      text-transform: uppercase;
+      margin-bottom: 12px;
+    }
+
+    /* List items */
+    .item-list {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .item-list li {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      padding: 10px 12px;
+      border-radius: 8px;
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      font-size: 13px;
+      line-height: 1.55;
+      color: var(--text-primary);
+      transition: background 150ms ease;
+    }
+
+    .item-list li:hover {
+      background: var(--bg-elevated);
+    }
+
+    .item-list li::before {
+      content: "";
+      flex-shrink: 0;
+      width: 5px;
+      height: 5px;
+      margin-top: 7px;
+      border-radius: 50%;
+      background: var(--accent-text);
+      opacity: 0.6;
+    }
+
+    .shortcut-list li {
+      display: block;
+    }
+
+    .shortcut-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+    }
+
+    .shortcut-copy {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .shortcut-keys {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      flex-wrap: wrap;
+      color: var(--text-secondary);
+    }
+
+    kbd {
+      font: inherit;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-primary);
+      padding: 4px 8px;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      background: rgba(255, 255, 255, 0.06);
+      box-shadow: inset 0 -1px 0 rgba(255, 255, 255, 0.08);
+      white-space: nowrap;
+    }
+
+    @media (max-width: 560px) {
+      .shortcut-row {
+        flex-direction: column;
+        align-items: flex-start;
+      }
+    }
+
+    /* Meta tags */
+    .meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 24px;
+      padding-top: 20px;
+      border-top: 1px solid var(--border);
+    }
+
+    .meta-tag {
+      padding: 5px 10px;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      background: rgba(255, 255, 255, 0.03);
+      color: var(--text-tertiary);
+      font-size: 11px;
+      font-weight: 500;
+      letter-spacing: 0.01em;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="container">
+    <span class="version-badge">v1.0.0</span>
+    <h1>Release notes</h1>
+    <p class="lead">The first release of Snipjar focuses on a fast macOS launcher for storing, finding, copying, and
+      pasting local snippets without leaving the keyboard.</p>
+
+    <div class="section">
+      <h2 class="section-title">Highlights</h2>
+      <ul class="item-list">
+        <li>Launch Snipjar from anywhere with Control + Option + Space and search recent snippets immediately.</li>
+        <li>Create, edit, delete, and tag snippets in a compact desktop workflow.</li>
+        <li>Copy or paste the selected snippet back into the previously active app with a macOS-first flow.</li>
+      </ul>
+    </div>
+
+    <div class="section">
+      <h2 class="section-title">Shortcut keys</h2>
+      <ul class="item-list shortcut-list">
+        <li>
+          <div class="shortcut-row">
+            <span class="shortcut-copy">Open or hide the launcher</span>
+            <span
+              class="shortcut-keys"><kbd>Control</kbd><span>+</span><kbd>Option</kbd><span>+</span><kbd>Space</kbd></span>
+          </div>
+        </li>
+        <li>
+          <div class="shortcut-row">
+            <span class="shortcut-copy">Paste the selected snippet into the previous app</span>
+            <span class="shortcut-keys"><kbd>Return</kbd></span>
+          </div>
+        </li>
+        <li>
+          <div class="shortcut-row">
+            <span class="shortcut-copy">Create a new snippet</span>
+            <span class="shortcut-keys"><kbd>Command</kbd><span>+</span><kbd>N</kbd></span>
+          </div>
+        </li>
+        <li>
+          <div class="shortcut-row">
+            <span class="shortcut-copy">Edit the selected snippet</span>
+            <span class="shortcut-keys"><kbd>Command</kbd><span>+</span><kbd>E</kbd></span>
+          </div>
+        </li>
+        <li>
+          <div class="shortcut-row">
+            <span class="shortcut-copy">Delete the selected snippet</span>
+            <span class="shortcut-keys"><kbd>Command</kbd><span>+</span><kbd>Backspace</kbd></span>
+          </div>
+        </li>
+        <li>
+          <div class="shortcut-row">
+            <span class="shortcut-copy">Move through search results</span>
+            <span class="shortcut-keys"><kbd>Up</kbd><kbd>Down</kbd></span>
+          </div>
+        </li>
+      </ul>
+    </div>
+
+    <div class="section">
+      <h2 class="section-title">Behavior notes</h2>
+      <ul class="item-list">
+        <li>Snippets are stored locally on-device in SQLite.</li>
+        <li>Automatic paste may require Accessibility permission on macOS.</li>
+        <li>The menu bar tray now includes Show, Release notes, and Quit for quick access.</li>
+      </ul>
+    </div>
+
+    <div class="meta">
+      <span class="meta-tag">Desktop app</span>
+      <span class="meta-tag">Local-first storage</span>
+      <span class="meta-tag">macOS-focused</span>
+    </div>
+  </div>
+</body>
+
+</html>

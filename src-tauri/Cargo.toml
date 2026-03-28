@@ -1,6 +1,6 @@
 [package]
 name = "snipjar"
-version = "0.1.0"
+version = "1.0.0"
 description = "A macOS-first desktop launcher for local text snippets."
 authors = ["Snipjar contributors"]
 edition = "2021"
