@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { FormEvent } from "react";
 import {
   createEntry,
@@ -23,6 +23,11 @@ type FormState = {
   tags: string;
 };
 
+type DeleteState = {
+  id: string;
+  key: string;
+};
+
 const EMPTY_FORM: FormState = {
   key: "",
   value: "",
@@ -33,15 +38,19 @@ function App() {
   const [query, setQuery] = useState("");
   const [entries, setEntries] = useState<EntrySummary[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [expandedActionId, setExpandedActionId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [feedback, setFeedback] = useState<string | null>(null);
   const [editor, setEditor] = useState<EditorState | null>(null);
+  const [deleteState, setDeleteState] = useState<DeleteState | null>(null);
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
   const [editorLoading, setEditorLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [pasting, setPasting] = useState(false);
   const requestCounter = useRef(0);
   const shouldFocusValueRef = useRef(false);
+  const suppressBlurUntilRef = useRef(0);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
   const valueInputRef = useRef<HTMLTextAreaElement | null>(null);
 
@@ -62,6 +71,26 @@ function App() {
       setSelectedId(entries[0].id);
     }
   }, [entries, selectedId]);
+
+  useEffect(() => {
+    if (!expandedActionId) {
+      return;
+    }
+
+    if (!entries.some((entry) => entry.id === expandedActionId)) {
+      setExpandedActionId(null);
+    }
+  }, [entries, expandedActionId]);
+
+  useEffect(() => {
+    if (!expandedActionId) {
+      return;
+    }
+
+    if (selectedId !== expandedActionId) {
+      setExpandedActionId(null);
+    }
+  }, [selectedId, expandedActionId]);
 
   useEffect(() => {
     const timeout = window.setTimeout(() => {
@@ -103,87 +132,6 @@ function App() {
     node.setSelectionRange(length, length);
   }, [editor, editorLoading]);
 
-  useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.metaKey && event.key.toLowerCase() === "n") {
-        event.preventDefault();
-        openCreateModal();
-        return;
-      }
-
-      if (event.metaKey && event.key.toLowerCase() === "e") {
-        event.preventDefault();
-        void openEditModal();
-        return;
-      }
-
-      if (event.metaKey && event.key === "Backspace") {
-        event.preventDefault();
-        void onDeleteSelected();
-        return;
-      }
-
-      if (event.key === "Escape" && editor) {
-        event.preventDefault();
-        closeEditor();
-        return;
-      }
-
-      if (editor) {
-        return;
-      }
-
-      if (event.key === "Escape") {
-        event.preventDefault();
-        void getCurrentWindow().hide();
-        return;
-      }
-
-      if (event.key === "ArrowDown") {
-        event.preventDefault();
-        moveSelection(1);
-      } else if (event.key === "ArrowUp") {
-        event.preventDefault();
-        moveSelection(-1);
-      } else if (event.key === "Enter") {
-        event.preventDefault();
-        void onPasteSelected();
-      }
-    };
-
-    window.addEventListener("keydown", handleKeyDown);
-    return () => {
-      window.removeEventListener("keydown", handleKeyDown);
-    };
-  }, [editor, editorLoading, entries, query, selectedId]);
-
-  useEffect(() => {
-    let blurTimeout: number | null = null;
-
-    const handleWindowBlur = () => {
-      if (editor || editorLoading || saving) {
-        return;
-      }
-
-      blurTimeout = window.setTimeout(() => {
-        blurTimeout = null;
-        if (document.hasFocus()) {
-          return;
-        }
-
-        void getCurrentWindow().hide();
-      }, 0);
-    };
-
-    window.addEventListener("blur", handleWindowBlur);
-    return () => {
-      if (blurTimeout !== null) {
-        window.clearTimeout(blurTimeout);
-      }
-      window.removeEventListener("blur", handleWindowBlur);
-    };
-  }, [editor, editorLoading, saving]);
-
   async function loadEntries(nextQuery: string) {
     requestCounter.current += 1;
     const currentRequest = requestCounter.current;
@@ -213,7 +161,7 @@ function App() {
     }
   }
 
-  function openCreateModal() {
+  const openCreateModal = useCallback(() => {
     const nextKey = entries.length === 0 ? query.trim() : "";
 
     shouldFocusValueRef.current = true;
@@ -223,17 +171,20 @@ function App() {
       key: nextKey,
     });
     setFeedback(null);
-  }
+  }, [entries, query]);
 
-  async function openEditModal() {
-    if (!selectedEntry || editorLoading) {
+  const openEditModal = useCallback(async (overrideId?: string) => {
+    const targetId = overrideId ?? selectedId;
+    const targetEntry = entries.find((e) => e.id === targetId) ?? null;
+
+    if (!targetEntry || editorLoading) {
       return;
     }
 
     setEditorLoading(true);
     setFeedback(null);
     try {
-      const entry = await getEntry(selectedEntry.id);
+      const entry = await getEntry(targetEntry.id);
       shouldFocusValueRef.current = true;
       setEditor({
         mode: "edit",
@@ -252,16 +203,21 @@ function App() {
     } finally {
       setEditorLoading(false);
     }
-  }
+  }, [entries, selectedId, editorLoading]);
 
-  function closeEditor() {
+  const closeEditor = useCallback(() => {
     shouldFocusValueRef.current = false;
     setEditor(null);
     setForm(EMPTY_FORM);
     setFeedback(null);
-  }
+  }, []);
 
-  function moveSelection(direction: 1 | -1) {
+  const closeDeleteDialog = useCallback(() => {
+    setDeleteState(null);
+    setFeedback(null);
+  }, []);
+
+  const moveSelection = useCallback((direction: 1 | -1) => {
     if (entries.length === 0) {
       return;
     }
@@ -271,32 +227,52 @@ function App() {
     const nextIndex =
       (safeCurrent + direction + entries.length) % entries.length;
     setSelectedId(entries[nextIndex].id);
-  }
+  }, [entries, selectedId]);
 
-  async function onDeleteSelected() {
-    if (!selectedEntry) {
-      return;
-    }
-
-    const approved = window.confirm(
-      `Delete "${selectedEntry.key}"? This cannot be undone.`,
+  const toggleEntryActions = useCallback((entryId: string) => {
+    setSelectedId(entryId);
+    setExpandedActionId((currentId) =>
+      currentId === entryId ? null : entryId,
     );
-    if (!approved) {
+  }, []);
+
+  const onDeleteSelected = useCallback((overrideId?: string) => {
+    const targetId = overrideId ?? selectedId;
+    const targetEntry = entries.find((e) => e.id === targetId) ?? null;
+
+    if (!targetEntry) {
       return;
     }
 
+    setSelectedId(targetEntry.id);
+    setDeleteState({
+      id: targetEntry.id,
+      key: targetEntry.key,
+    });
+    setFeedback(null);
+  }, [selectedId, entries]);
+
+  const confirmDelete = useCallback(async () => {
+    if (!deleteState) {
+      return;
+    }
+
+    setDeleting(true);
     try {
-      await deleteEntry(selectedEntry.id);
-      setFeedback(`Deleted "${selectedEntry.key}".`);
+      await deleteEntry(deleteState.id);
+      setDeleteState(null);
+      setFeedback(`Deleted "${deleteState.key}".`);
       await loadEntries(query);
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "Unable to delete entry";
       setFeedback(message);
+    } finally {
+      setDeleting(false);
     }
-  }
+  }, [deleteState, query]);
 
-  async function onPasteSelected() {
+  const onPasteSelected = useCallback(async () => {
     if (!selectedEntry) {
       return;
     }
@@ -312,9 +288,9 @@ function App() {
     } finally {
       setPasting(false);
     }
-  }
+  }, [selectedEntry]);
 
-  async function onPasteEntry(entryId: string) {
+  const onPasteEntry = useCallback(async (entryId: string) => {
     setPasting(true);
     try {
       const result = await pasteEntry(entryId);
@@ -326,9 +302,9 @@ function App() {
     } finally {
       setPasting(false);
     }
-  }
+  }, []);
 
-  async function onSubmitEditor(event: FormEvent<HTMLFormElement>) {
+  const onSubmitEditor = useCallback(async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
     if (!editor) {
@@ -346,19 +322,16 @@ function App() {
 
     setSaving(true);
     try {
-      let successMessage = "";
       if (editor.mode === "create") {
         const created = await createEntry(input);
         setSelectedId(created.id);
-        successMessage = `Created "${created.key}".`;
       } else {
         const updated = await updateEntry(editor.id, input);
         setSelectedId(updated.id);
-        successMessage = `Updated "${updated.key}".`;
       }
       closeEditor();
       await loadEntries(query);
-      setFeedback(successMessage);
+      setFeedback(null);
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "Unable to save entry";
@@ -366,12 +339,122 @@ function App() {
     } finally {
       setSaving(false);
     }
-  }
+  }, [editor, form, query, closeEditor]);
 
-  const helperText =
-    query.trim().length === 0
-      ? "Showing recent snippets"
-      : `Search results for "${query}"`;
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (deleteState) {
+        if (event.key === "Escape") {
+          event.preventDefault();
+          closeDeleteDialog();
+          return;
+        }
+
+        if (event.key === "Enter") {
+          event.preventDefault();
+          void confirmDelete();
+        }
+
+        return;
+      }
+
+      if (editor) {
+        if (event.key === "Escape") {
+          event.preventDefault();
+          closeEditor();
+        }
+
+        return;
+      }
+
+      if (event.metaKey && event.key.toLowerCase() === "n") {
+        event.preventDefault();
+        openCreateModal();
+        return;
+      }
+
+      if (event.metaKey && event.key.toLowerCase() === "e") {
+        event.preventDefault();
+        void openEditModal();
+        return;
+      }
+
+      if (event.metaKey && event.key === "Backspace") {
+        event.preventDefault();
+        onDeleteSelected();
+        return;
+      }
+
+      if (event.key === "Escape" && expandedActionId) {
+        event.preventDefault();
+        setExpandedActionId(null);
+        return;
+      }
+
+      if (event.key === "Escape") {
+        event.preventDefault();
+        setQuery("");
+        void getCurrentWindow().hide();
+        return;
+      }
+
+      if (event.key === "ArrowDown") {
+        event.preventDefault();
+        moveSelection(1);
+      } else if (event.key === "ArrowUp") {
+        event.preventDefault();
+        moveSelection(-1);
+      } else if (event.key === "Enter") {
+        event.preventDefault();
+        if (selectedId) {
+          void onPasteSelected();
+        } else if (query.trim().length > 0) {
+          openCreateModal();
+        }
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [deleteState, editor, query, selectedId, expandedActionId, openCreateModal, openEditModal, onDeleteSelected, closeDeleteDialog, confirmDelete, closeEditor, moveSelection, onPasteSelected]);
+
+  useEffect(() => {
+    const currentWindow = getCurrentWindow();
+    let unlisten: (() => void) | null = null;
+    let disposed = false;
+
+    void currentWindow
+      .onFocusChanged(({ payload: focused }) => {
+        if (focused) {
+          suppressBlurUntilRef.current = Date.now() + 150;
+          return;
+        }
+
+        if (Date.now() < suppressBlurUntilRef.current) {
+          return;
+        }
+
+        setQuery("");
+        closeEditor();
+        closeDeleteDialog();
+        void currentWindow.hide();
+      })
+      .then((nextUnlisten) => {
+        if (disposed) {
+          nextUnlisten();
+          return;
+        }
+
+        unlisten = nextUnlisten;
+      });
+
+    return () => {
+      disposed = true;
+      unlisten?.();
+    };
+  }, [closeDeleteDialog, closeEditor]);
 
   const modalTitle = editor?.mode === "create" ? "Add Snippet" : "Edit Snippet";
 
@@ -383,7 +466,7 @@ function App() {
       ? `Editing "${editor.originalKey}"`
       : "Create a new local snippet";
 
-  const isBusy = loading || editorLoading || saving || pasting;
+  const isBusy = loading || editorLoading || saving || deleting || pasting;
 
   const formatUpdatedAt = (updatedAt: string) => {
     const parsed = new Date(updatedAt);
@@ -395,42 +478,12 @@ function App() {
 
   return (
     <main className="launcher">
-      <header className="launcherHeader">
-        <div className="titleBlock">
-          <h1>Snipjar</h1>
-          <p>{helperText}</p>
-        </div>
-        <div className="headerActions">
-          <button type="button" onClick={openCreateModal}>
-            Add
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              void openEditModal();
-            }}
-            disabled={!selectedEntry || editorLoading}
-          >
-            Edit
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              void onDeleteSelected();
-            }}
-            disabled={!selectedEntry}
-          >
-            Delete
-          </button>
-        </div>
-      </header>
-
       <div className="searchBar">
         <input
           ref={searchInputRef}
           type="text"
           value={query}
-          placeholder="Search by key or tags"
+          placeholder="Search by key or tags..."
           onChange={(event) => setQuery(event.currentTarget.value)}
         />
       </div>
@@ -441,51 +494,125 @@ function App() {
         ) : null}
 
         <ul>
-          {entries.map((entry) => (
-            <li key={entry.id}>
-              <button
-                type="button"
-                className={entry.id === selectedId ? "resultRow active" : "resultRow"}
-                onClick={() => {
-                  setSelectedId(entry.id);
-                  void onPasteEntry(entry.id);
-                }}
-                onMouseEnter={() => setSelectedId(entry.id)}
+          {entries.map((entry) => {
+            const isActive = entry.id === selectedId;
+            const isExpanded = entry.id === expandedActionId;
+
+            return (
+              <li
+                key={entry.id}
+                className={[
+                  "resultItem",
+                  isActive ? "active" : "",
+                  isExpanded ? "expanded" : "",
+                ].filter(Boolean).join(" ")}
               >
-                <div className="rowTop">
-                  <strong>{entry.key}</strong>
-                  <span>{formatUpdatedAt(entry.updatedAt)}</span>
+                <div
+                  className={isActive ? "resultRow active" : "resultRow"}
+                  onClick={() => {
+                    setSelectedId(entry.id);
+                    setExpandedActionId(null);
+                    void onPasteEntry(entry.id);
+                  }}
+                  onMouseEnter={() => setSelectedId(entry.id)}
+                >
+                  <div className="rowContent">
+                    <div className="rowTop">
+                      <strong>{entry.key}</strong>
+                      <span>{formatUpdatedAt(entry.updatedAt)}</span>
+                    </div>
+                    <div className="tags">
+                      {entry.tags.length === 0 ? (
+                        <em>No tags</em>
+                      ) : (
+                        entry.tags.map((tag) => (
+                          <span key={`${entry.id}-${tag}`} className="tagPill">
+                            {tag}
+                          </span>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    className={isExpanded ? "chevronBtn expanded" : "chevronBtn"}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      toggleEntryActions(entry.id);
+                    }}
+                    aria-expanded={isExpanded}
+                    aria-label={isExpanded ? `Hide actions for ${entry.key}` : `Show actions for ${entry.key}`}
+                    title={isExpanded ? "Hide actions" : "Show actions"}
+                  >
+                    <svg viewBox="0 0 16 16" aria-hidden="true">
+                      <path
+                        d="M4 6.5 8 10.5l4-4"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="1.75"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                    </svg>
+                  </button>
                 </div>
-                <div className="tags">
-                  {entry.tags.length === 0 ? (
-                    <em>No tags</em>
-                  ) : (
-                    entry.tags.map((tag) => (
-                      <span key={`${entry.id}-${tag}`} className="tagPill">
-                        {tag}
-                      </span>
-                    ))
-                  )}
-                </div>
-              </button>
-            </li>
-          ))}
+                {isExpanded ? (
+                  <div className="expandedActions" onClick={(event) => event.stopPropagation()}>
+                    <button
+                      type="button"
+                      className="actionBtn expandedActionBtn"
+                      onClick={() => {
+                        setExpandedActionId(null);
+                        void openEditModal(entry.id);
+                      }}
+                      title="Edit (Cmd+E)"
+                    >
+                      Edit
+                    </button>
+                    <button
+                      type="button"
+                      className="actionBtn expandedActionBtn deleteBtn"
+                      onClick={() => {
+                        setExpandedActionId(null);
+                        void onDeleteSelected(entry.id);
+                      }}
+                      title="Delete (Cmd+Backspace)"
+                    >
+                      Delete
+                    </button>
+                  </div>
+                ) : null}
+              </li>
+            );
+          })}
         </ul>
       </section>
 
       <footer className="statusBar">
-        <span>
-          Shortcuts: Enter/click paste, Cmd+N add, Cmd+E edit, Cmd+Backspace delete,
-          Arrows move selection
-        </span>
-        {isBusy ? <span>Working...</span> : null}
+        <div className="statusLeft">
+          <span className="logo">✦ Snipjar</span>
+        </div>
+        <div className="statusRight">
+          {isBusy ? (
+            <span>Working...</span>
+          ) : (
+            <div className="shortcuts">
+              <span>Shortcuts:</span>
+              <span>⏎ Paste</span>
+              <span>⌘N Add</span>
+              <span>⌘E Edit</span>
+              <span>⌘⌫ Delete</span>
+              <span>↓↑ Navigate</span>
+            </div>
+          )}
+        </div>
       </footer>
 
       {feedback ? <p className="feedback">{feedback}</p> : null}
 
       {editor ? (
-        <div className="modalBackdrop" role="presentation">
-          <form className="modal" onSubmit={onSubmitEditor}>
+        <div className="modalBackdrop" role="presentation" onClick={closeEditor}>
+          <form className="modal" onSubmit={onSubmitEditor} onClick={(event) => event.stopPropagation()}>
             <h2>{modalTitle}</h2>
             <p>{modalBody}</p>
 
@@ -501,7 +628,10 @@ function App() {
               required
             />
 
-            <label htmlFor="entry-value">Value</label>
+            <div className="labelRow">
+              <label htmlFor="entry-value">Value</label>
+              <span className="tip">Shift + Enter for new line</span>
+            </div>
             <textarea
               id="entry-value"
               ref={valueInputRef}
@@ -512,6 +642,12 @@ function App() {
                   ...current,
                   value: nextValue,
                 }));
+              }}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" && !event.shiftKey) {
+                  event.preventDefault();
+                  event.currentTarget.form?.requestSubmit();
+                }
               }}
               placeholder="Snippet text to paste later"
               required
@@ -537,6 +673,40 @@ function App() {
               </button>
             </div>
           </form>
+        </div>
+      ) : null}
+
+      {deleteState ? (
+        <div className="modalBackdrop" role="presentation" onClick={closeDeleteDialog}>
+          <div
+            className="modal"
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="delete-snippet-title"
+            aria-describedby="delete-snippet-description"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <h2 id="delete-snippet-title">Delete Snippet</h2>
+            <p id="delete-snippet-description">
+              {`Delete "${deleteState.key}"? This cannot be undone.`}
+            </p>
+
+            <div className="modalActions">
+              <button type="button" onClick={closeDeleteDialog} disabled={deleting}>
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="dangerButton"
+                onClick={() => {
+                  void confirmDelete();
+                }}
+                disabled={deleting}
+              >
+                {deleting ? "Deleting..." : "Delete snippet"}
+              </button>
+            </div>
+          </div>
         </div>
       ) : null}
     </main>

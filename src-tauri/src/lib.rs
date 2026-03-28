@@ -5,11 +5,16 @@ use std::time::Duration;
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, Ordering};
 
+use tauri::menu::{MenuBuilder, MenuItemBuilder};
+use tauri::ActivationPolicy;
 use tauri::Manager;
 use tauri::State;
+use tauri::tray::TrayIconBuilder;
 use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
 
 const MAIN_WINDOW_LABEL: &str = "main";
+const TRAY_ICON_ID: &str = "snipjar-menu-bar";
+const TRAY_QUIT_MENU_ID: &str = "tray-quit";
 
 #[derive(Default)]
 struct RuntimeState {
@@ -114,6 +119,7 @@ fn show_launcher_window(app_handle: &tauri::AppHandle) -> Result<(), tauri::Erro
     remember_previous_application(app_handle);
 
     if let Some(window) = app_handle.get_webview_window(MAIN_WINDOW_LABEL) {
+        window.unminimize()?;
         window.show()?;
         window.set_focus()?;
     }
@@ -190,12 +196,41 @@ fn run_osascript(script: &str) -> Result<String, String> {
 
 fn toggle_launcher_window(app_handle: &tauri::AppHandle) -> Result<(), tauri::Error> {
     if let Some(window) = app_handle.get_webview_window(MAIN_WINDOW_LABEL) {
-        if window.is_visible()? {
+        if window.is_visible()? && window.is_focused()? {
             hide_launcher_window(app_handle)?;
         } else {
             show_launcher_window(app_handle)?;
         }
     }
+
+    Ok(())
+}
+
+fn request_app_quit(app_handle: &tauri::AppHandle) {
+    let runtime_state = app_handle.state::<RuntimeState>();
+    runtime_state.is_quitting.store(true, Ordering::Relaxed);
+    app_handle.exit(0);
+}
+
+fn setup_tray(app: &tauri::App) -> tauri::Result<()> {
+    let quit_item = MenuItemBuilder::with_id(TRAY_QUIT_MENU_ID, "Quit").build(app)?;
+    let tray_menu = MenuBuilder::new(app).item(&quit_item).build()?;
+    let tray_icon = app
+        .default_window_icon()
+        .cloned()
+        .expect("default window icon should be configured");
+
+    TrayIconBuilder::with_id(TRAY_ICON_ID)
+        .menu(&tray_menu)
+        .icon(tray_icon)
+        .icon_as_template(true)
+        .show_menu_on_left_click(true)
+        .on_menu_event(|app_handle, event| {
+            if event.id() == TRAY_QUIT_MENU_ID {
+                request_app_quit(app_handle);
+            }
+        })
+        .build(app)?;
 
     Ok(())
 }
@@ -235,6 +270,9 @@ pub fn run() {
             let db_path = db_state.path.clone();
             app.manage(db_state);
             app.manage(RuntimeState::default());
+            #[cfg(target_os = "macos")]
+            app.handle().set_activation_policy(ActivationPolicy::Accessory)?;
+            setup_tray(app)?;
             let launcher_shortcut =
                 Shortcut::new(Some(Modifiers::CONTROL | Modifiers::ALT), Code::Space);
             app.global_shortcut().register(launcher_shortcut)?;
