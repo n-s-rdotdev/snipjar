@@ -1,41 +1,39 @@
 # Snipjar
 
-Snipjar is a macOS-first desktop launcher for local text snippets. It is built with Tauri 2, React, Vite, and a Rust backend.
+Snipjar is a macOS-first desktop launcher for local text snippets. It is built with Tauri 2, React 19, Vite, and a Rust backend that owns persistence, search, clipboard integration, and paste automation.
 
-## What It Does
+## Overview
 
-- Opens a single floating launcher window with `Control + Option + Space`.
-- Searches local snippets by `key` and `tags`.
-- Stores data in SQLite under the app local data directory.
-- Supports keyboard-first create, edit, delete, and paste flows.
-- Copies the selected value to the clipboard and attempts an automatic paste into the previously active app.
+- Opens a single floating launcher with `Control + Option + Space`
+- Stores snippets locally in SQLite as `snipjar.db`
+- Searches by snippet key and tags
+- Supports keyboard-first create, edit, delete, and paste flows
+- Copies the selected snippet and attempts to paste it back into the previously active app
 
-## Architecture
+Snipjar is a local snippet launcher, not a secrets manager.
 
-- Frontend: React + Vite in `src/`
-- Native shell and command surface: Tauri 2 in `src-tauri/`
-- Persistence, validation, ranking, and paste automation: Rust in `src-tauri/src/storage.rs`
+## Project Structure
 
-Rust owns the core native responsibilities: persistence, search/ranking, global shortcut handling, clipboard writes, and paste automation.
+- `src/`: React UI and Tauri command client
+- `src-tauri/src/lib.rs`: app lifecycle, launcher visibility, tray integration, and native command registration
+- `src-tauri/src/storage.rs`: SQLite storage, validation, search ranking, clipboard, and paste flow
 
-## v1 Non-Goals
+## v1 Scope
 
-Snipjar v1 is intentionally narrow in scope.
+Out of scope for v1:
 
-- No encryption
-- No Keychain integration
-- No import/export
-- No sync
-- No folders
-- No settings UI
-- No launch-at-login support
-- No configurable shortcut in v1
-
-This is a local snippet launcher, not a secrets manager.
+- Encryption
+- Keychain integration
+- Import and export
+- Sync
+- Folders
+- Settings UI
+- Launch at login
+- Configurable shortcuts
 
 ## Development
 
-Install dependencies:
+Install JavaScript dependencies:
 
 ```sh
 npm install
@@ -44,7 +42,19 @@ npm install
 Run the desktop app in development:
 
 ```sh
-npm run tauri dev
+npm run tauri -- dev
+```
+
+Build the web bundle used by Tauri:
+
+```sh
+npm run build
+```
+
+Build a desktop bundle:
+
+```sh
+npm run tauri -- build
 ```
 
 Run Rust tests:
@@ -53,21 +63,15 @@ Run Rust tests:
 cd src-tauri && cargo test
 ```
 
-Build the frontend bundle:
-
-```sh
-npm run build
-```
-
 ## macOS Notes
 
-Automatic paste uses simulated `Cmd+V`, so macOS Accessibility permission may be required. When auto-paste is unavailable, Snipjar keeps the value on the clipboard and reopens the launcher with a fallback message.
+Automatic paste uses a simulated `Cmd+V`, so macOS Accessibility permission may be required. If Snipjar cannot complete the paste, it keeps the snippet value on the clipboard and restores the launcher with a fallback message.
 
-## Current Verification
+## Verification
 
 Verified on 2026-03-28:
 
-- `cargo test` passes in `src-tauri/`
 - `npm run build` passes at the repo root
+- `cd src-tauri && cargo test` passes
 
-Launcher behavior and paste behavior still need native manual verification from a running Tauri app.
+Launcher visibility, global shortcut behavior, and automatic paste still require manual verification from a running Tauri build on macOS.

@@ -590,7 +590,10 @@ function App() {
 
       <footer className="statusBar">
         <div className="statusLeft">
-          <span className="logo">✦ Snipjar</span>
+          <div className="logoLockup">
+            <img className="logoMark" src="/snipjar-icon.svg" alt="Snipjar" />
+            <span className="logoLabel">Snipjar</span>
+          </div>
         </div>
         <div className="statusRight">
           {isBusy ? (

@@ -250,11 +250,25 @@ body {
   color: var(--text-muted);
 }
 
-.statusLeft .logo {
+.logoLockup {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.logoMark {
+  width: 18px;
+  height: 18px;
+  display: block;
+  opacity: 0.92;
+}
+
+.logoLabel {
   font-weight: 600;
   color: var(--text-main);
-  opacity: 0.8;
+  opacity: 0.86;
   font-size: 13px;
+  letter-spacing: 0.01em;
 }
 
 .statusRight {

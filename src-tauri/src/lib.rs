@@ -215,10 +215,8 @@ fn request_app_quit(app_handle: &tauri::AppHandle) {
 fn setup_tray(app: &tauri::App) -> tauri::Result<()> {
     let quit_item = MenuItemBuilder::with_id(TRAY_QUIT_MENU_ID, "Quit").build(app)?;
     let tray_menu = MenuBuilder::new(app).item(&quit_item).build()?;
-    let tray_icon = app
-        .default_window_icon()
-        .cloned()
-        .expect("default window icon should be configured");
+    let tray_icon = tauri::image::Image::from_bytes(include_bytes!("../icons/tray-icon.png"))
+        .expect("failed to load tray icon");
 
     TrayIconBuilder::with_id(TRAY_ICON_ID)
         .menu(&tray_menu)
